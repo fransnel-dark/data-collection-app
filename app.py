@@ -1,14 +1,16 @@
 """
-MY DATA COLLECTION APP — Projet de fin d'année Data Collection
+MY DATA COLLECTION APP
 
 Options :
     1. Scraper des données sur plusieurs pages (BeautifulSoup, code du cours)
     2. Télécharger les données brutes (Web Scraper no-code) + données des bulletins PDF
     3. Dashboard des données nettoyées (une source à la fois)
     4. Formulaires d'évaluation (Kobo + Google Forms)
+
+Le design (couleurs, cartes, fond) est dans style.css et .streamlit/config.toml
 """
 
-from pathlib import Path
+from html import escape
 
 import pandas as pd
 import plotly.express as px
@@ -17,7 +19,7 @@ import streamlit as st
 import scrapers as sc
 
 # ----------------------------------------------------------------------------------
-# LIENS DES FORMULAIRES — à remplacer par tes propres liens une fois les formulaires créés
+# Liens des formulaires
 # ----------------------------------------------------------------------------------
 KOBO_URL = "https://ee.kobotoolbox.org/x/gfUgReva"
 GOOGLE_FORMS_URL = "https://forms.gle/fyppdTMwt9dAbLwa7"
@@ -26,28 +28,22 @@ RAW_DIR = sc.DATA_DIR / "raw"
 CLEAN_DIR = sc.DATA_DIR / "clean"
 
 SOURCES = {
-    "books": {"nom": "Books to Scrape", "url": "https://books.toscrape.com/",
+    "books": {"nom": "Books to Scrape", "texte": "Librairie en ligne : prix, notes, stock, catégories.",
               "scrape": sc.scrape_books, "clean": sc.clean_books, "raw_csv": "books_webscraper.csv"},
-    "gaaraas": {"nom": "Gaaraas — Dakar auto (voitures)", "url": "https://www.gaaraas.com/fr/users/dakar-auto",
+    "gaaraas": {"nom": "Gaaraas (voitures)", "texte": "Annonces de voitures de l'annonceur Dakar auto.",
                 "scrape": sc.scrape_gaaraas, "clean": sc.clean_gaaraas, "raw_csv": "gaaraas_webscraper.csv"},
-    "motos": {"nom": "Dakar-Auto — Motos & scooters", "url": "https://dakar-auto.com/senegal/motos-and-scooters-3",
+    "motos": {"nom": "Dakar-Auto (motos)", "texte": "Motos et scooters à vendre au Sénégal.",
               "scrape": sc.scrape_motos, "clean": sc.clean_motos, "raw_csv": "motos_webscraper.csv"},
 }
+NOMS = {"books": "Livres", "gaaraas": "Voitures", "motos": "Motos", "bulletins": "Bulletins climat"}
 
-COULEUR = "#1f6f8b"
-px.defaults.template = "plotly_white"
-px.defaults.color_discrete_sequence = [COULEUR, "#e07a5f", "#81b29a", "#f2cc8f", "#3d405b", "#9c89b8"]
+# Couleurs des graphiques (contrastées et distinguables par les daltoniens sur fond sombre)
+COULEURS = ["#1fa294", "#c98500", "#5a8df0", "#e0607e"]
+ABREGE = dict(zip(sc.MOIS, ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]))
+ECHELLE = ["#33301c", "#7d5c12", "#c98500", "#ffd98a"]
 
 st.set_page_config(page_title="My Data Collection App", page_icon="📊", layout="wide")
-
-st.markdown("""
-<style>
-div.stButton > button, div.stDownloadButton > button, a[data-testid="stBaseLinkButton-secondary"] {
-    width: 100%; font-size: 15px; height: 3em;
-}
-[data-testid="stMetricValue"] { font-size: 1.6rem; }
-</style>
-""", unsafe_allow_html=True)
+st.html("<style>" + (sc.BASE_DIR / "style.css").read_text(encoding="utf-8") + "</style>")
 
 
 # ----------------------------------------------------------------------------------
@@ -67,252 +63,347 @@ def load_raw_webscraper(fichier):
     return pd.read_csv(RAW_DIR / fichier)
 
 
-@st.cache_data
+@st.cache_data(show_spinner="Lecture des 11 bulletins PDF...")
 def load_bulletins_raw():
     return sc.extract_bulletins()
 
 
+# ----------------------------------------------------------------------------------
+# Petites fonctions d'affichage
+# ----------------------------------------------------------------------------------
 def csv_bytes(df):
-    return df.to_csv(index=False).encode("utf-8")
+    return df.to_csv(index=False).encode("utf-8-sig")  # utf-8-sig : accents lisibles dans Excel
 
 
-def fcfa(x):
-    return "—" if pd.isna(x) else f"{x:,.0f} F CFA".replace(",", " ")
+def nombre(x, unite="", decimales=0):
+    if pd.isna(x):
+        return "-"
+    return f"{x:,.{decimales}f}".replace(",", chr(160)).replace(".", ",") + (f" {unite}" if unite else "")
+
+
+def section(titre, texte=""):
+    st.html(f"<div class='section'><h2>{escape(titre)}</h2>" + (f"<p>{escape(texte)}</p>" if texte else "") + "</div>")
+
+
+def carte(icone, titre, texte, chiffre):
+    st.html(f"<div class='carte-icone ic-{icone}'></div><div class='carte-titre'>{escape(titre)}</div>"
+            f"<p class='carte-texte'>{escape(texte)}</p><div class='carte-chiffre'>{escape(chiffre)}</div>")
+
+
+def kpis(valeurs):
+    """Affiche une rangée d'indicateurs : liste de (nom, valeur, précision)."""
+    st.html("<div class='kpis'>" + "".join(
+        f"<div class='kpi'><div class='kpi-nom'>{escape(n)}</div><div class='kpi-valeur'>{escape(str(v))}</div>"
+        f"<div class='kpi-note'>{escape(p)}</div></div>" for n, v, p in valeurs) + "</div>")
+
+
+def afficher(colonne, cle, fig, hauteur=360):
+    """Applique le style commun aux graphiques et les place dans une carte."""
+    fig.update_layout(
+        height=hauteur, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, sans-serif", color="#d5e6e4", size=13),
+        title=dict(font=dict(family="Sora, sans-serif", size=16, color="#ffffff"), x=0, xanchor="left"),
+        margin=dict(l=8, r=24, t=56, b=8), bargap=0.28, separators=", ",
+        legend=dict(title_text="", orientation="h", y=-0.2, yanchor="top", x=0, xanchor="left"),
+        hoverlabel=dict(bgcolor="#06262c", bordercolor="#f4b942", font=dict(color="#ffffff")),
+    )
+    fig.update_xaxes(gridcolor="rgba(255,255,255,.08)", zeroline=False, automargin=True)
+    fig.update_yaxes(gridcolor="rgba(255,255,255,.08)", zeroline=False, automargin=True)
+    if fig.data and getattr(fig.data[0], "orientation", None) == "h":
+        fig.update_yaxes(showgrid=False)
+    with colonne.container(key=f"graphe_{cle}"):
+        st.plotly_chart(fig, width="stretch", theme=None, key=f"plot_{cle}", config={"displayModeBar": False})
+
+
+def classement(serie, titre, unite="annonces", couleur=COULEURS[0]):
+    """Barres horizontales triées, avec la valeur au bout de chaque barre."""
+    d = serie.sort_values().reset_index()
+    d.columns = ["nom", "valeur"]
+    d["texte"] = d["valeur"].apply(nombre)
+    fig = px.bar(d, x="valeur", y="nom", orientation="h", title=titre, text="texte")
+    fig.update_traces(marker=dict(color=couleur, cornerradius=4), textposition="outside", cliponaxis=False,
+                      textfont_color="#f1f7f6", hovertemplate="%{y} : %{text} " + unite + "<extra></extra>")
+    fig.update_xaxes(title="", showticklabels=False, showgrid=False)
+    fig.update_yaxes(title="", type="category", ticksuffix="  ")
+    return fig
+
+
+def colonnes_verticales(d, x, y, titre, nom_x, nom_y, couleur=COULEURS[0], fmt=",.0f"):
+    fig = px.bar(d, x=x, y=y, title=titre, labels={x: nom_x, y: nom_y}, text_auto=fmt)
+    fig.update_traces(marker=dict(color=couleur, cornerradius=4), textposition="outside", cliponaxis=False)
+    return fig
+
+
+def histogramme(d, x, titre, nom_x, nom_y, couleur=COULEURS[0]):
+    fig = px.histogram(d, x=x, nbins=25, title=titre, labels={x: nom_x})
+    fig.update_traces(marker=dict(color=couleur, line=dict(color="#0e353c", width=2)),
+                      hovertemplate=nom_x + " : %{x}<br>" + nom_y + " : %{y}<extra></extra>")
+    fig.update_layout(bargap=0)
+    return fig.update_yaxes(title=nom_y)
+
+
+def prix_par_annee(df):
+    """Prix médian par année, uniquement pour les années qui ont au moins 3 annonces."""
+    d = df.dropna(subset=["annee", "prix"]).groupby("annee")["prix"].agg(["median", "count"]).reset_index()
+    d = d[d["count"] >= 3]
+    fig = px.line(d, x="annee", y="median", markers=True, title="Prix médian selon l'année du véhicule",
+                  labels={"annee": "Année", "median": "Prix médian (F CFA)"}, custom_data=["count"])
+    fig.update_traces(line=dict(color=COULEURS[1], width=2), marker_size=8,
+                      hovertemplate="%{x} : %{y:,.0f} F CFA (%{customdata[0]} annonces)<extra></extra>")
+    return fig
 
 
 # ----------------------------------------------------------------------------------
-# En-tête et barre latérale
+# Barre latérale
 # ----------------------------------------------------------------------------------
-st.markdown("<h1 style='text-align: center;'>MY DATA COLLECTION APP</h1>", unsafe_allow_html=True)
-st.markdown("""
-Cette application permet de **scraper** des données sur plusieurs pages, de **télécharger** les données brutes
-collectées sans code (Web Scraper) et les données des bulletins climatologiques, de **visualiser** un dashboard
-des données nettoyées et d'**évaluer** l'application.
-* **Librairies Python :** requests, BeautifulSoup, pdfplumber, pandas, sqlite3, plotly, streamlit
-* **Sources :** [Books to Scrape](https://books.toscrape.com/) — [Gaaraas](https://www.gaaraas.com/fr/users/dakar-auto)
-  — [Dakar-Auto](https://dakar-auto.com/senegal/motos-and-scooters-3) — Bulletins climatologiques 2020-2021 (PDF)
+st.sidebar.html("<div class='marque'><div class='marque-logo'>DC</div><div class='marque-nom'>Data Collection</div></div>")
+OPTIONS = {
+    "Scraper des données": ":material/travel_explore:",
+    "Télécharger les données brutes": ":material/download:",
+    "Dashboard des données": ":material/monitoring:",
+    "Évaluer l'application": ":material/rate_review:",
+}
+option = st.sidebar.radio("Options", list(OPTIONS), format_func=lambda o: f"{OPTIONS[o]}  {o}")
+if option == "Scraper des données":
+    st.sidebar.divider()
+    nb_pages = st.sidebar.selectbox("Nombre de pages à scraper", list(range(1, max(sc.MAX_PAGES.values()) + 1)))
+    st.sidebar.caption("Si un site a moins de pages, le scraping s'arrête à la dernière.")
+
+# ----------------------------------------------------------------------------------
+# Bandeau titre
+# ----------------------------------------------------------------------------------
+st.html("""
+<div class='hero'>
+  <h1 class='hero-titre'>MY <b>DATA</b> COLLECTION APP</h1>
+  <p class='hero-texte'>Cette application permet de scraper des données sur plusieurs pages, de télécharger les données
+  brutes et de voir les dashboards des données nettoyées.</p>
+  <div class='puces'>
+    <a class='puce' href='https://books.toscrape.com/' target='_blank' rel='noopener'>Books to Scrape</a>
+    <a class='puce' href='https://www.gaaraas.com/fr/users/dakar-auto' target='_blank' rel='noopener'>Gaaraas</a>
+    <a class='puce' href='https://dakar-auto.com/senegal/motos-and-scooters-3' target='_blank' rel='noopener'>Dakar-Auto</a>
+    <span class='puce'>Bulletins climatologiques 2020-2021</span>
+  </div>
+  <div class='libs'>Python : requests, BeautifulSoup, pdfplumber, pandas, sqlite3, plotly, streamlit</div>
+</div>
 """)
 
-st.sidebar.header("Paramètres")
-option = st.sidebar.selectbox("Options", [
-    "Scraper des données",
-    "Télécharger les données brutes",
-    "Dashboard des données",
-    "Évaluer l'application",
-])
-
 # ==================================================================================
-# OPTION 1 — SCRAPER
+# OPTION 1 : SCRAPER
 # ==================================================================================
 if option == "Scraper des données":
-    source = st.sidebar.selectbox("Source", list(SOURCES), format_func=lambda k: SOURCES[k]["nom"])
-    max_pages = sc.MAX_PAGES[source]
-    nb_pages = st.sidebar.selectbox("Nombre de pages", list(range(1, max_pages + 1)), index=0)
+    section("Scraper des données",
+            "Choisissez le nombre de pages dans la barre latérale, puis la source à scraper.")
+    clic = None
+    for colonne, (source, infos) in zip(st.columns(3), SOURCES.items()):
+        pages = min(nb_pages, sc.MAX_PAGES[source])
+        with colonne.container(key=f"carte_scrape_{source}"):
+            carte(source, infos["nom"], infos["texte"], f"{sc.MAX_PAGES[source]} pages disponibles")
+            if st.button(f"Scraper {pages} page{'s' if pages > 1 else ''}", key=f"scrape_{source}",
+                         icon=":material/play_arrow:", width="stretch"):
+                clic = (source, pages)
+    if nb_pages > 5:
+        st.caption("Pour les livres, chaque fiche est ouverte une par une : comptez plusieurs secondes par page.")
 
-    st.subheader(f"Scraper : {SOURCES[source]['nom']}")
-    st.caption(f"Source : {SOURCES[source]['url']} — {max_pages} pages disponibles. "
-               + ("Chaque livre ouvre sa page détail : compter ~10 secondes par page." if source == "books" else ""))
-
-    if st.button(f"Lancer le scraping sur {nb_pages} page(s)"):
-        barre = st.progress(0.0, text="Scraping en cours...")
-        df_raw = SOURCES[source]["scrape"](
-            nb_pages, progress=lambda i, n: barre.progress(i / n, text=f"Page {i}/{n}"))
+    if clic:
+        source, pages = clic
+        st.session_state.pop("scrape", None)
+        barre = st.progress(0.0, text="Connexion au site...")
+        try:
+            df_raw = SOURCES[source]["scrape"](
+                pages, progress=lambda i, n: barre.progress(i / n, text=f"Page {i} sur {n}"))
+            if df_raw.empty:
+                st.error("Aucune donnée récupérée : la structure du site a peut-être changé.")
+            else:
+                st.session_state["scrape"] = (source, df_raw, SOURCES[source]["clean"](df_raw))
+        except Exception as erreur:
+            st.error(f"Le scraping n'a pas abouti. Le site est peut-être indisponible, réessayez plus tard. ({erreur})")
         barre.empty()
-        if df_raw.empty:
-            st.error("Aucune donnée récupérée. Le site est peut-être indisponible.")
-        else:
-            st.session_state["scrape"] = (source, df_raw, SOURCES[source]["clean"](df_raw))
 
-    if "scrape" in st.session_state and st.session_state["scrape"][0] == source:
-        _, df_raw, df_clean = st.session_state["scrape"]
-        st.success(f"{df_clean.shape[0]} lignes et {df_clean.shape[1]} colonnes après nettoyage.")
-        onglet_clean, onglet_raw = st.tabs(["Données nettoyées", "Données brutes"])
-        with onglet_clean:
-            st.dataframe(df_clean, width="stretch")
-        with onglet_raw:
-            st.dataframe(df_raw, width="stretch")
-        c1, c2 = st.columns(2)
-        c1.download_button("Télécharger les données nettoyées (CSV)", csv_bytes(df_clean),
-                           f"{source}_scraping.csv", "text/csv")
-        if c2.button("Enregistrer dans la base de données"):
-            nouvelles = sc.add_to_db(df_clean, sc.TABLES[source])
-            load_clean.clear()
-            st.success(f"Table « {sc.TABLES[source]} » mise à jour : {nouvelles} nouvelle(s) ligne(s) ajoutée(s), "
-                       "les lignes déjà présentes ont été actualisées.")
+    if "scrape" in st.session_state:
+        source, df_raw, df_clean = st.session_state["scrape"]
+        with st.container(key="resultat"):
+            section(f"Résultat : {SOURCES[source]['nom']}",
+                    f"Dimension des données : {df_clean.shape[0]} lignes et {df_clean.shape[1]} colonnes.")
+            onglet_clean, onglet_raw = st.tabs(["Données nettoyées", "Données brutes"])
+            onglet_clean.dataframe(df_clean, width="stretch")
+            onglet_raw.dataframe(df_raw, width="stretch")
+            c1, c2 = st.columns(2)
+            c1.download_button("Télécharger en CSV", csv_bytes(df_clean), f"{source}_scraping.csv", "text/csv",
+                               icon=":material/download:", width="stretch")
+            if c2.button("Enregistrer dans la base de données", icon=":material/database:", width="stretch"):
+                nouvelles = sc.add_to_db(df_clean, sc.TABLES[source])
+                load_clean.clear()
+                st.success(f"Table « {sc.TABLES[source]} » mise à jour : {nouvelles} nouvelle(s) ligne(s), "
+                           "les lignes déjà présentes ont été actualisées.")
 
 # ==================================================================================
-# OPTION 2 — DONNÉES BRUTES
+# OPTION 2 : DONNÉES BRUTES
 # ==================================================================================
 elif option == "Télécharger les données brutes":
-    st.subheader("Données brutes (non nettoyées)")
-    st.markdown("Données collectées avec l'extension Chrome **Web Scraper** (sans code), puis données extraites "
-                "des **bulletins climatologiques** avec pdfplumber.")
+    section("Données brutes, non nettoyées",
+            "Collectées sans code avec l'extension Web Scraper, et extraites des bulletins PDF avec pdfplumber.")
+    jeux = {s: (NOMS[s], "Export brut de l'extension Chrome Web Scraper.") for s, i in SOURCES.items()}
+    jeux["bulletins"] = ("Bulletins climat", "Températures extraites des bulletins PDF.")
+    for colonne, (source, (nom, texte)) in zip(st.columns(4), jeux.items()):
+        with colonne.container(key=f"carte_raw_{source}"):
+            carte(source, nom, texte, "11 bulletins PDF" if source == "bulletins" else "Fichier CSV")
+            if st.button("Afficher", key=f"raw_{source}", icon=":material/table_view:", width="stretch"):
+                st.session_state["raw_affiche"] = source
 
-    for source, infos in SOURCES.items():
-        fichier = RAW_DIR / infos["raw_csv"]
-        if st.button(infos["nom"], key=f"raw_{source}"):
-            st.session_state["raw_affiche"] = source
-            st.rerun()  # réaffiche la page pour ne montrer que les données choisies
-        if st.session_state.get("raw_affiche") == source:
-            if fichier.exists():
-                df = load_raw_webscraper(infos["raw_csv"])
-                st.write(f"Dimension des données : {df.shape[0]} lignes et {df.shape[1]} colonnes.")
-                st.dataframe(df, width="stretch")
-                st.download_button("Télécharger (CSV)", csv_bytes(df), infos["raw_csv"], "text/csv",
-                                   key=f"dl_{source}")
+    choix = st.session_state.get("raw_affiche")
+    if choix:
+        with st.container(key="resultat"):
+            if choix == "bulletins":
+                df = load_bulletins_raw()
+                c1, c2 = st.columns(2)
+                toutes = sorted(df["annee"].unique())
+                annees = c1.multiselect("Année", toutes, default=toutes)
+                mois_dispo = [m for m in sc.MOIS if m in df["mois"].unique()]
+                mois = c2.multiselect("Mois", mois_dispo, default=mois_dispo)
+                df = df[df["annee"].isin(annees) & df["mois"].isin(mois)]
+                contenu, fichier = csv_bytes(df), "bulletins_bruts.csv"
             else:
-                st.warning(f"Le fichier `data/raw/{infos['raw_csv']}` n'a pas encore été ajouté.")
-
-    if st.button("Bulletins climatologiques (PDF)", key="raw_bulletins"):
-        st.session_state["raw_affiche"] = "bulletins"
-        st.rerun()
-    if st.session_state.get("raw_affiche") == "bulletins":
-        df = load_bulletins_raw()
-        c1, c2 = st.columns(2)
-        annees = c1.multiselect("Année", sorted(df["annee"].unique()), default=sorted(df["annee"].unique()))
-        mois_dispo = [m for m in sc.MOIS if m in df["mois"].unique()]
-        mois = c2.multiselect("Mois", mois_dispo, default=mois_dispo)
-        df = df[df["annee"].isin(annees) & df["mois"].isin(mois)]
-        st.write(f"Dimension des données : {df.shape[0]} lignes et {df.shape[1]} colonnes "
-                 "(tableau de la page 8 de chaque bulletin, valeurs brutes).")
-        st.dataframe(df, width="stretch")
-        st.download_button("Télécharger (CSV)", csv_bytes(df), "bulletins_bruts.csv", "text/csv")
+                fichier = SOURCES[choix]["raw_csv"]
+                df = load_raw_webscraper(fichier)
+                contenu = (RAW_DIR / fichier).read_bytes()  # fichier d'origine, inchangé
+            section(jeux[choix][0], f"Dimension des données : {df.shape[0]} lignes et {df.shape[1]} colonnes.")
+            st.dataframe(df, width="stretch")
+            st.download_button("Télécharger en CSV", contenu, fichier, "text/csv",
+                               icon=":material/download:", width="stretch")
 
 # ==================================================================================
-# OPTION 3 — DASHBOARD
+# OPTION 3 : DASHBOARD
 # ==================================================================================
 elif option == "Dashboard des données":
-    choix = {"books": "Books to Scrape", "gaaraas": "Gaaraas — voitures",
-             "motos": "Dakar-Auto — motos & scooters", "bulletins": "Bulletins climatologiques"}
-    source = st.sidebar.selectbox("Source", list(choix), format_func=choix.get)
+    section("Dashboard des données nettoyées")
+    with st.container(key="choix_source"):
+        source = st.radio("Source", list(NOMS), format_func=NOMS.get, horizontal=True, label_visibility="collapsed")
     df = load_clean(source)
-    st.subheader(f"Dashboard — {choix[source]}")
-    st.caption(f"Données nettoyées : {df.shape[0]} lignes, table SQLite « {sc.TABLES[source]} ».")
 
     # ---------------------------------------------------------------- BOOKS
     if source == "books":
-        categories = st.sidebar.multiselect("Catégories", sorted(df["categorie"].unique()))
-        if categories:
-            df = df[df["categorie"].isin(categories)]
-        k = st.columns(4)
-        k[0].metric("Livres", f"{len(df)}")
-        k[1].metric("Prix moyen", f"£{df['prix'].mean():.2f}")
-        k[2].metric("Note moyenne", f"{df['note'].mean():.2f} / 5")
-        k[3].metric("Exemplaires en stock", f"{df['nb_produits'].sum()}")
+        filtre = st.multiselect("Filtrer par catégorie", sorted(df["categorie"].unique()), placeholder="Toutes")
+        if filtre:
+            df = df[df["categorie"].isin(filtre)]
+        kpis([("Livres", nombre(len(df)), f"{df['categorie'].nunique()} catégories"),
+              ("Prix moyen", "£" + nombre(df["prix"].mean(), decimales=2),
+               f"de £{nombre(df['prix'].min(), decimales=2)} à £{nombre(df['prix'].max(), decimales=2)}"),
+              ("Note moyenne", nombre(df["note"].mean(), "/ 5", 2), "étoiles"),
+              ("Exemplaires en stock", nombre(df["nb_produits"].sum()), "tous livres confondus")])
+        notes = df.groupby("note", as_index=False).agg(nb=("titre", "count"), prix=("prix", "mean"))
         c1, c2 = st.columns(2)
-        top = df["categorie"].value_counts().head(15).sort_values()
-        c1.plotly_chart(px.bar(top, orientation="h", title="Catégories les plus représentées",
-                               labels={"value": "Nombre de livres", "categorie": ""}).update_layout(showlegend=False),
-                        width="stretch")
-        c2.plotly_chart(px.histogram(df, x="prix", nbins=30, title="Distribution des prix",
-                                     labels={"prix": "Prix (£)"}), width="stretch")
-        c3, c4 = st.columns(2)
-        notes = df.groupby("note", as_index=False).agg(nb=("titre", "count"), prix_moyen=("prix", "mean"))
-        c3.plotly_chart(px.bar(notes, x="note", y="nb", title="Nombre de livres par note",
-                               labels={"note": "Note (étoiles)", "nb": "Livres"}), width="stretch")
-        c4.plotly_chart(px.bar(notes, x="note", y="prix_moyen", title="Prix moyen selon la note",
-                               labels={"note": "Note (étoiles)", "prix_moyen": "Prix moyen (£)"}),
-                        width="stretch")
+        afficher(c1, "b1", classement(df["categorie"].value_counts().head(10), "Les 10 catégories les plus fournies", "livres"))
+        afficher(c2, "b2", histogramme(df, "prix", "Distribution des prix", "Prix (£)", "Livres", COULEURS[1]))
+        c1, c2 = st.columns(2)
+        afficher(c1, "b3", colonnes_verticales(notes, "note", "nb", "Nombre de livres par note", "Note (étoiles)", "Livres"))
+        afficher(c2, "b4", colonnes_verticales(notes, "note", "prix", "Prix moyen selon la note", "Note (étoiles)",
+                                               "Prix moyen (£)", COULEURS[1], ".2f"))
 
     # ---------------------------------------------------------------- GAARAAS
     elif source == "gaaraas":
-        marques = st.sidebar.multiselect("Marques", sorted(df["marque"].unique()))
-        if marques:
-            df = df[df["marque"].isin(marques)]
-        k = st.columns(4)
-        k[0].metric("Annonces", f"{len(df)}")
-        k[1].metric("Prix médian", fcfa(df["prix"].median()))
-        k[2].metric("Kilométrage médian", f"{df['kilometrage'].median():,.0f} km".replace(",", " "))
-        k[3].metric("Année médiane", f"{df['annee'].median():.0f}")
+        filtre = st.multiselect("Filtrer par marque", sorted(df["marque"].unique()), placeholder="Toutes")
+        if filtre:
+            df = df[df["marque"].isin(filtre)]
+        kpis([("Annonces", nombre(len(df)), f"{df['marque'].nunique()} marques"),
+              ("Prix médian", nombre(df["prix"].median(), "F"), "francs CFA"),
+              ("Kilométrage médian", nombre(df["kilometrage"].median(), "km"), "au compteur"),
+              ("Année médiane", f"{df['annee'].median():.0f}" if df["annee"].notna().any() else "-", "mise en circulation")])
         c1, c2 = st.columns(2)
-        top = df["marque"].value_counts().head(12).sort_values()
-        c1.plotly_chart(px.bar(top, orientation="h", title="Marques les plus présentes",
-                               labels={"value": "Annonces", "marque": ""}).update_layout(showlegend=False),
-                        width="stretch")
-        c2.plotly_chart(px.scatter(df, x="annee", y="prix", color="boite_vitesse", hover_data=["marque", "modele"],
-                                   title="Prix selon l'année",
-                                   labels={"annee": "Année", "prix": "Prix (F CFA)", "boite_vitesse": "Boîte"}),
-                        width="stretch")
-        c3, c4 = st.columns(2)
-        c3.plotly_chart(px.histogram(df, x="boite_vitesse", color="carburant", barmode="group",
-                                     title="Boîte de vitesses et carburant",
-                                     labels={"boite_vitesse": "Boîte de vitesses", "carburant": "Carburant"}),
-                        width="stretch")
-        prix_marque = (df.groupby("marque")["prix"].median().sort_values(ascending=False).head(12)
-                       .sort_values().reset_index())
-        c4.plotly_chart(px.bar(prix_marque, x="prix", y="marque", orientation="h",
-                               title="Prix médian par marque", labels={"prix": "Prix médian (F CFA)", "marque": ""}),
-                        width="stretch")
+        afficher(c1, "g1", classement(df["marque"].value_counts().head(10), "Les 10 marques les plus présentes"))
+        afficher(c2, "g2", prix_par_annee(df))
+        c1, c2 = st.columns(2)
+        fig = px.scatter(df.dropna(subset=["prix", "kilometrage"]), x="kilometrage", y="prix", color="boite_vitesse",
+                         hover_name="marque", hover_data={"modele": True, "annee": True},
+                         color_discrete_map={"Manuelle": COULEURS[0], "Automatique": COULEURS[1]},
+                         title="Prix et kilométrage", labels={"kilometrage": "Kilométrage", "prix": "Prix (F CFA)",
+                                                             "boite_vitesse": "Boîte", "modele": "Modèle", "annee": "Année"})
+        fig.update_traces(marker=dict(size=9, line=dict(color="#0e353c", width=1.5)))
+        afficher(c1, "g3", fig)
+        d = df.groupby(["boite_vitesse", "carburant"]).size().reset_index(name="nb")
+        fig = px.bar(d, x="boite_vitesse", y="nb", color="carburant", barmode="group", text_auto=True,
+                     color_discrete_map={"Diesel": COULEURS[2], "Essence": COULEURS[3]}, title="Boîte de vitesses et carburant",
+                     labels={"boite_vitesse": "", "nb": "Annonces", "carburant": "Carburant"})
+        fig.update_traces(marker_cornerradius=4, textposition="outside", cliponaxis=False)
+        afficher(c2, "g4", fig)
 
     # ---------------------------------------------------------------- MOTOS
     elif source == "motos":
-        categories = st.sidebar.multiselect("Catégorie", sorted(df["categorie"].dropna().unique()))
-        if categories:
-            df = df[df["categorie"].isin(categories)]
-        k = st.columns(4)
-        k[0].metric("Annonces", f"{len(df)}")
-        k[1].metric("Prix médian", fcfa(df["prix"].median()))
-        k[2].metric("Part de neufs", f"{(df['etat'] == 'Neuf').mean():.0%}")
-        k[3].metric("Marques différentes", f"{df['marque'].nunique()}")
+        filtre = st.multiselect("Filtrer par marque", sorted(df["marque"].unique()), placeholder="Toutes")
+        if filtre:
+            df = df[df["marque"].isin(filtre)]
+        kpis([("Annonces", nombre(len(df)), f"{df['marque'].nunique()} marques"),
+              ("Prix médian", nombre(df["prix"].median(), "F"), "francs CFA"),
+              ("Occasion", f"{(df['etat'] == 'Occasion').mean():.0%}", "des annonces"),
+              ("Scooters", f"{(df['categorie'] == 'Scooters').mean():.0%}", "selon le classement du site")])
         c1, c2 = st.columns(2)
-        top = df["marque"].value_counts().head(12).sort_values()
-        c1.plotly_chart(px.bar(top, orientation="h", title="Marques les plus présentes",
-                               labels={"value": "Annonces", "marque": ""}).update_layout(showlegend=False),
-                        width="stretch")
-        c2.plotly_chart(px.histogram(df, x="categorie", color="etat", barmode="group",
-                                     title="Catégorie et état", labels={"categorie": "", "etat": "État"}),
-                        width="stretch")
-        c3, c4 = st.columns(2)
-        c3.plotly_chart(px.box(df.dropna(subset=["prix"]), x="categorie", y="prix", color="etat",
-                               title="Prix selon la catégorie et l'état",
-                               labels={"categorie": "", "prix": "Prix (F CFA)", "etat": "État"}),
-                        width="stretch")
-        quartiers = df["quartier"].value_counts().head(12).sort_values()
-        c4.plotly_chart(px.bar(quartiers, orientation="h", title="Quartiers où l'on vend le plus",
-                               labels={"value": "Annonces", "quartier": ""}).update_layout(showlegend=False),
-                        width="stretch")
+        afficher(c1, "m1", classement(df["marque"].value_counts().head(10), "Les 10 marques les plus présentes"))
+        afficher(c2, "m2", prix_par_annee(df))
+        c1, c2 = st.columns(2)
+        fig = px.box(df.dropna(subset=["prix"]), x="categorie", y="prix", title="Répartition des prix par catégorie",
+                     labels={"categorie": "", "prix": "Prix (F CFA)"}, hover_data=["marque", "modele"])
+        fig.update_traces(line=dict(color=COULEURS[0], width=2), fillcolor="rgba(31,162,148,.3)",
+                          marker=dict(size=6, color=COULEURS[0]))
+        afficher(c1, "m3", fig)
+        afficher(c2, "m4", classement(df["quartier"].value_counts().head(10), "Les 10 quartiers les plus actifs", couleur=COULEURS[1]))
 
     # ---------------------------------------------------------------- BULLETINS
     else:
-        stations = st.sidebar.multiselect("Stations", sorted(df["station"].unique()),
-                                          default=["Dakar", "Saint-Louis", "Tambacounda", "Ziguinchor"])
-        k = st.columns(4)
-        k[0].metric("Bulletins", f"{df.groupby(['annee', 'mois']).ngroups}")
-        k[1].metric("Stations", f"{df['station'].nunique()}")
-        k[2].metric("Record de chaleur", f"{df['tmax_maxmax'].max():.1f} °C",
-                    df.loc[df['tmax_maxmax'].idxmax(), 'station'], delta_color="off")
-        k[3].metric("Minimum le plus bas", f"{df['tmin_minmin'].min():.1f} °C",
-                    df.loc[df['tmin_minmin'].idxmin(), 'station'], delta_color="off")
-        df["periode"] = df["mois"].str.capitalize() + " " + df["annee"].astype(str)
+        kpis([("Bulletins", df.groupby(["annee", "mois"]).ngroups, "7 en 2020, 4 en 2021"),
+              ("Stations", df["station"].nunique(), "au Sénégal"),
+              ("Record de chaleur", nombre(df["tmax_maxmax"].max(), "°C", 1),
+               f"{df.loc[df['tmax_maxmax'].idxmax(), 'station']}, {df.loc[df['tmax_maxmax'].idxmax(), 'mois']} {df.loc[df['tmax_maxmax'].idxmax(), 'annee']}"),
+              ("Minimum le plus bas", nombre(df["tmin_minmin"].min(), "°C", 1),
+               f"{df.loc[df['tmin_minmin'].idxmin(), 'station']}, {df.loc[df['tmin_minmin'].idxmin(), 'mois']} {df.loc[df['tmin_minmin'].idxmin(), 'annee']}")])
+        stations = st.multiselect("Comparer des stations (4 au maximum)", sorted(df["station"].unique()),
+                                  default=["Dakar", "Matam", "Saint-Louis", "Ziguinchor"], max_selections=4)
+        # chaque station garde sa couleur quand on en ajoute ou retire une autre
+        couleurs = {s: c for s, c in st.session_state.get("couleurs_stations", {}).items() if s in stations}
+        for s in stations:
+            couleurs.setdefault(s, next(c for c in COULEURS if c not in couleurs.values()))
+        st.session_state["couleurs_stations"] = couleurs
         df = df.sort_values(["annee", "mois_num"])
-        sel = df[df["station"].isin(stations)] if stations else df
-        c1, c2 = st.columns(2)
-        c1.plotly_chart(px.line(sel, x="periode", y="tmax_maxmax", color="station", markers=True,
-                                title="Température maximale absolue par mois",
-                                labels={"periode": "", "tmax_maxmax": "Tmax maxmax (°C)", "station": "Station"}),
-                        width="stretch")
-        c2.plotly_chart(px.line(sel, x="periode", y="tmin_minmin", color="station", markers=True,
-                                title="Température minimale absolue par mois",
-                                labels={"periode": "", "tmin_minmin": "Tmin minmin (°C)", "station": "Station"}),
-                        width="stretch")
-        carte = df.pivot_table(index="station", columns="periode", values="tmax_maxmax", sort=False)
-        st.plotly_chart(px.imshow(carte, aspect="auto", color_continuous_scale="OrRd",
-                                  title="Tmax maxmax (°C) par station et par mois",
-                                  labels={"x": "", "y": "", "color": "°C"}), width="stretch")
+        df["date"] = pd.to_datetime(dict(year=df["annee"], month=df["mois_num"], day=1))
+        calendrier = pd.date_range(df["date"].min(), df["date"].max(), freq="MS")
+        if stations:
+            courbes = pd.concat([df[df["station"] == s].set_index("date").reindex(calendrier).assign(station=s)
+                                 for s in stations]).rename_axis("date").reset_index()
+            for colonne, (cle, var, titre) in zip(st.columns(2), [("c1", "tmax_maxmax", "Température maximale du mois"),
+                                                                 ("c2", "tmin_minmin", "Température minimale du mois")]):
+                fig = px.line(courbes, x="date", y=var, color="station", markers=True, title=titre,
+                              color_discrete_map=couleurs, labels={"date": "", var: "°C", "station": "Station"})
+                fig.update_traces(line_width=2, marker_size=8, connectgaps=False, hovertemplate="%{y:.1f} °C")
+                fig.update_layout(hovermode="x unified")
+                fig.update_xaxes(tickformat="%m/%Y", hoverformat="%m/%Y")
+                afficher(colonne, cle, fig, 400)
+        c1, c2 = st.columns([3, 2])
+        df["periode"] = df["mois"].map(ABREGE) + " " + df["annee"].astype(str)
+        carte_chaleur = df.pivot_table(index="station", columns="periode", values="tmax_maxmax", sort=False).sort_index()
+        fig = px.imshow(carte_chaleur, aspect="auto", color_continuous_scale=ECHELLE, title="Tmax par station et par mois (°C)",
+                        labels={"x": "", "y": "", "color": "°C"})
+        fig.update_traces(xgap=2, ygap=2, hovertemplate="%{y}, %{x} : %{z:.1f} °C<extra></extra>")
+        fig.update_yaxes(dtick=1, showgrid=False).update_xaxes(showgrid=False)
+        afficher(c1, "c3", fig, 620)
+        chaudes = df.groupby("station")["tmax_maxmax"].max().nlargest(12).sort_values().reset_index()
+        fig = px.scatter(chaudes, x="tmax_maxmax", y="station", text=chaudes["tmax_maxmax"].map(lambda v: nombre(v, decimales=1)),
+                         title="Records de chaleur par station (°C)", labels={"tmax_maxmax": "", "station": ""})
+        fig.update_traces(marker=dict(size=13, color=COULEURS[1]), textposition="middle right", cliponaxis=False,
+                          hovertemplate="%{y} : %{x:.1f} °C<extra></extra>")
+        afficher(c2, "c4", fig, 620)
 
     with st.expander("Voir les données nettoyées"):
-        st.dataframe(df, width="stretch")
-        st.download_button("Télécharger (CSV)", csv_bytes(df), f"{source}_clean.csv", "text/csv")
+        table = df.drop(columns=["date", "periode"], errors="ignore")
+        st.dataframe(table, width="stretch")
+        st.download_button("Télécharger en CSV", csv_bytes(table), f"{source}_clean.csv", "text/csv",
+                           icon=":material/download:", width="stretch")
 
 # ==================================================================================
-# OPTION 4 — FORMULAIRES
+# OPTION 4 : FORMULAIRES
 # ==================================================================================
 else:
-    st.subheader("Donnez votre avis sur l'application")
-    st.markdown("Le même questionnaire existe en deux versions. Choisissez celle que vous préférez :")
-    c1, c2 = st.columns(2)
-    c1.link_button("Formulaire Kobo", KOBO_URL)
-    c2.link_button("Formulaire Google Forms", GOOGLE_FORMS_URL)
-    if "REMPLACER" in KOBO_URL + GOOGLE_FORMS_URL:
-        st.info("Les liens des formulaires ne sont pas encore configurés (variables KOBO_URL et "
-                "GOOGLE_FORMS_URL en haut de app.py).")
+    section("Donnez votre avis", "Le même questionnaire existe en deux versions. Choisissez celle que vous préférez.")
+    for colonne, (cle, nom, texte, url) in zip(st.columns(2), [
+            ("kobo", "Formulaire Kobo", "Le niveau de satisfaction se calcule pendant la saisie.", KOBO_URL),
+            ("google", "Formulaire Google Forms", "Un formulaire en plusieurs étapes, adapté au téléphone.", GOOGLE_FORMS_URL)]):
+        with colonne.container(key=f"carte_form_{cle}"):
+            carte(cle, nom, texte, "6 sections")
+            st.link_button("Ouvrir le formulaire", url, icon=":material/open_in_new:", width="stretch")

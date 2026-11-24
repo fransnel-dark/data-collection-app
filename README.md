@@ -1,17 +1,17 @@
-# My Data Collection App — Projet de fin d'année Data Collection
+# My Data Collection App
 
 Collecte, nettoyage, stockage et visualisation de **4 sources de données**, avec une application Streamlit.
 
 | # | Source | Méthode | Volume |
 |---|---|---|---|
 | 1 | [Books to Scrape](https://books.toscrape.com/) | requests + BeautifulSoup (page liste + page détail) | 50 pages, 1 000 livres |
-| 2 | [Gaaraas — Dakar auto](https://www.gaaraas.com/fr/users/dakar-auto) | requests + BeautifulSoup | 13 pages, 245 voitures |
-| 3 | [Dakar-Auto — Motos & scooters](https://dakar-auto.com/senegal/motos-and-scooters-3) | requests + BeautifulSoup | 55 pages, 1 089 annonces (1 078 sans doublons) |
+| 2 | [Gaaraas (Dakar auto)](https://www.gaaraas.com/fr/users/dakar-auto) | requests + BeautifulSoup | 13 pages, 245 voitures |
+| 3 | [Dakar-Auto (motos et scooters)](https://dakar-auto.com/senegal/motos-and-scooters-3) | requests + BeautifulSoup | 55 pages, 1 089 annonces (1 078 sans doublons) |
 | 4 | Bulletins climatologiques 2020-2021 (PDF) | pdfplumber | 11 bulletins, 258 lignes |
 
 ## Liens
 
-- Application : _à compléter après déploiement_
+- Application : https://data-collection-app-jean-fransnel-ebata-djounde.streamlit.app/
 - Vidéo : _à compléter_
 
 ## Fonctionnalités de l'application
@@ -26,6 +26,7 @@ Collecte, nettoyage, stockage et visualisation de **4 sources de données**, ave
 ```
 Projet_Data_Collection.ipynb   notebook : collecte + nettoyage + stockage des 4 sources
 app.py                         application Streamlit
+style.css                      design de l'application
 scrapers.py                    fonctions de scraping / nettoyage / base de données (utilisées par l'appli)
 data/
   bulletins/2020, 2021/        bulletins PDF
