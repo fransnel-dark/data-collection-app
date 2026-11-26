@@ -10,7 +10,6 @@
   --turquoise: #35c4b2;
 }
 
-/* ---------- Fond texturé ---------- */
 [data-testid="stAppViewContainer"] {
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E"),
@@ -24,7 +23,6 @@
 html, body, [data-testid="stMarkdownContainer"], button, input { font-family: 'Inter', sans-serif; }
 h1, h2, h3, h4, .hero-titre, .kpi-valeur, .carte-titre { font-family: 'Sora', sans-serif !important; }
 
-/* ---------- Barre latérale ---------- */
 [data-testid="stSidebar"] {
   background: linear-gradient(180deg, #0d5860 0%, #083a42 60%, #052a31 100%);
   border-right: 1px solid var(--bord);
@@ -42,8 +40,7 @@ h1, h2, h3, h4, .hero-titre, .kpi-valeur, .carte-titre { font-family: 'Sora', sa
   transition: background .15s, border-color .15s;
 }
 [data-testid="stSidebar"] [data-testid="stRadioOption"] { width: 100%; }
-[data-testid="stRadioOption"] > div > div:not([data-testid]) { display: none; }  /* cache le rond */
-[data-testid="stRadioOption"]:hover { background: rgba(255, 255, 255, .08); }
+[data-testid="stRadioOption"] > div > div:not([data-testid]) { display: none; }[data-testid="stRadioOption"]:hover { background: rgba(255, 255, 255, .08); }
 [data-testid="stRadioOption"]:has(input:checked) { background: rgba(244, 185, 66, .16); border-color: rgba(244, 185, 66, .65); }
 [data-testid="stRadioOption"]:has(input:focus-visible) { outline: 2px solid var(--safran); }
 .st-key-choix_source [data-testid="stRadioGroup"] { gap: .6rem; flex-wrap: wrap; }
@@ -51,7 +48,6 @@ h1, h2, h3, h4, .hero-titre, .kpi-valeur, .carte-titre { font-family: 'Sora', sa
 .st-key-choix_source [data-testid="stRadioOption"]:has(input:checked) { background: var(--safran); border-color: var(--safran); }
 .st-key-choix_source [data-testid="stRadioOption"]:has(input:checked) p { color: #06262c; font-weight: 600; }
 
-/* ---------- Bandeau titre ---------- */
 .hero { text-align: center; padding: .4rem 0 1.2rem; }
 .hero-titre {
   margin: 0; font-weight: 800; letter-spacing: -.02em; line-height: 1.1;
@@ -67,12 +63,10 @@ h1, h2, h3, h4, .hero-titre, .kpi-valeur, .carte-titre { font-family: 'Sora', sa
 a.puce:hover { border-color: var(--safran); }
 .libs { margin-top: .75rem; font-size: .85rem; color: var(--doux); }
 
-/* ---------- Titres de section ---------- */
 .section { margin: .4rem 0 1rem; }
 .section h2 { margin: 0; padding: 0; font-size: 1.55rem; color: #fff; }
 .section p { margin: .3rem 0 0; color: var(--doux); font-size: .95rem; }
 
-/* ---------- Cartes ---------- */
 [class*="st-key-carte_"], [class*="st-key-graphe_"], .st-key-resultat {
   background: rgba(14, 53, 60, .88); border: 1px solid var(--bord); border-radius: 18px;
   padding: 1.15rem 1.2rem; box-shadow: 0 14px 34px rgba(0, 0, 0, .25);
@@ -91,7 +85,6 @@ a.puce:hover { border-color: var(--safran); }
 .carte-texte { margin: 0; min-height: 3.1em; color: var(--doux); font-size: .9rem; line-height: 1.5; }
 .carte-chiffre { margin-top: .6rem; font-size: .86rem; color: var(--safran); font-weight: 600; }
 
-/* ---------- Indicateurs ---------- */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .9rem; margin: .3rem 0 .4rem; }
 .kpi {
   background: rgba(14, 53, 60, .88); border: 1px solid var(--bord); border-radius: 16px;
@@ -101,7 +94,6 @@ a.puce:hover { border-color: var(--safran); }
 .kpi-valeur { font-weight: 700; font-size: 1.55rem; color: #fff; margin-top: .15rem; }
 .kpi-note { font-size: .8rem; color: var(--doux); margin-top: .1rem; }
 
-/* ---------- Boutons ---------- */
 [data-testid="stBaseButton-secondary"], [data-testid="stBaseLinkButton-secondary"] {
   width: 100%; min-height: 2.9rem; border-radius: 12px; font-weight: 600;
   background: var(--safran); color: #06262c !important; border: 1px solid var(--safran);

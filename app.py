@@ -1,15 +1,3 @@
-"""
-MY DATA COLLECTION APP
-
-Options :
-    1. Scraper des données sur plusieurs pages (BeautifulSoup, code du cours)
-    2. Télécharger les données brutes (Web Scraper no-code) + données des bulletins PDF
-    3. Dashboard des données nettoyées (une source à la fois)
-    4. Formulaires d'évaluation (Kobo + Google Forms)
-
-Le design (couleurs, cartes, fond) est dans style.css et .streamlit/config.toml
-"""
-
 from html import escape
 
 import pandas as pd
@@ -18,9 +6,7 @@ import streamlit as st
 
 import scrapers as sc
 
-# ----------------------------------------------------------------------------------
-# Liens des formulaires
-# ----------------------------------------------------------------------------------
+# liens des formulaires
 KOBO_URL = "https://ee.kobotoolbox.org/x/gfUgReva"
 GOOGLE_FORMS_URL = "https://forms.gle/fyppdTMwt9dAbLwa7"
 
@@ -37,21 +23,17 @@ SOURCES = {
 }
 NOMS = {"books": "Livres", "gaaraas": "Voitures", "motos": "Motos", "bulletins": "Bulletins climat"}
 
-# Couleurs des graphiques (contrastées et distinguables par les daltoniens sur fond sombre)
 COULEURS = ["#1fa294", "#c98500", "#5a8df0", "#e0607e"]
 ABREGE = dict(zip(sc.MOIS, ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]))
 ECHELLE = ["#33301c", "#7d5c12", "#c98500", "#ffd98a"]
 
-st.set_page_config(page_title="My Data Collection App", page_icon="📊", layout="wide")
+st.set_page_config(page_title="My Data Collection App", layout="wide")
 st.html("<style>" + (sc.BASE_DIR / "style.css").read_text(encoding="utf-8") + "</style>")
 
 
-# ----------------------------------------------------------------------------------
-# Chargement des données (mis en cache pour ne pas relire la base à chaque clic)
-# ----------------------------------------------------------------------------------
+# chargement des données
 @st.cache_data
 def load_clean(source):
-    """Lit les données nettoyées dans la base SQLite (ou dans le CSV si la base est absente)."""
     try:
         return sc.load_from_db(sc.TABLES[source])
     except Exception:
@@ -68,11 +50,9 @@ def load_bulletins_raw():
     return sc.extract_bulletins()
 
 
-# ----------------------------------------------------------------------------------
-# Petites fonctions d'affichage
-# ----------------------------------------------------------------------------------
+# fonctions d'affichage
 def csv_bytes(df):
-    return df.to_csv(index=False).encode("utf-8-sig")  # utf-8-sig : accents lisibles dans Excel
+    return df.to_csv(index=False).encode("utf-8-sig")
 
 
 def nombre(x, unite="", decimales=0):
@@ -91,14 +71,12 @@ def carte(icone, titre, texte, chiffre):
 
 
 def kpis(valeurs):
-    """Affiche une rangée d'indicateurs : liste de (nom, valeur, précision)."""
     st.html("<div class='kpis'>" + "".join(
         f"<div class='kpi'><div class='kpi-nom'>{escape(n)}</div><div class='kpi-valeur'>{escape(str(v))}</div>"
         f"<div class='kpi-note'>{escape(p)}</div></div>" for n, v, p in valeurs) + "</div>")
 
 
 def afficher(colonne, cle, fig, hauteur=360):
-    """Applique le style commun aux graphiques et les place dans une carte."""
     fig.update_layout(
         height=hauteur, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(family="Inter, sans-serif", color="#d5e6e4", size=13),
@@ -116,7 +94,6 @@ def afficher(colonne, cle, fig, hauteur=360):
 
 
 def classement(serie, titre, unite="annonces", couleur=COULEURS[0]):
-    """Barres horizontales triées, avec la valeur au bout de chaque barre."""
     d = serie.sort_values().reset_index()
     d.columns = ["nom", "valeur"]
     d["texte"] = d["valeur"].apply(nombre)
@@ -143,7 +120,6 @@ def histogramme(d, x, titre, nom_x, nom_y, couleur=COULEURS[0]):
 
 
 def prix_par_annee(df):
-    """Prix médian par année, uniquement pour les années qui ont au moins 3 annonces."""
     d = df.dropna(subset=["annee", "prix"]).groupby("annee")["prix"].agg(["median", "count"]).reset_index()
     d = d[d["count"] >= 3]
     fig = px.line(d, x="annee", y="median", markers=True, title="Prix médian selon l'année du véhicule",
@@ -153,9 +129,6 @@ def prix_par_annee(df):
     return fig
 
 
-# ----------------------------------------------------------------------------------
-# Barre latérale
-# ----------------------------------------------------------------------------------
 st.sidebar.html("<div class='marque'><div class='marque-logo'>DC</div><div class='marque-nom'>Data Collection</div></div>")
 OPTIONS = {
     "Scraper des données": ":material/travel_explore:",
@@ -169,9 +142,6 @@ if option == "Scraper des données":
     nb_pages = st.sidebar.selectbox("Nombre de pages à scraper", list(range(1, max(sc.MAX_PAGES.values()) + 1)))
     st.sidebar.caption("Si un site a moins de pages, le scraping s'arrête à la dernière.")
 
-# ----------------------------------------------------------------------------------
-# Bandeau titre
-# ----------------------------------------------------------------------------------
 st.html("""
 <div class='hero'>
   <h1 class='hero-titre'>MY <b>DATA</b> COLLECTION APP</h1>
@@ -187,9 +157,7 @@ st.html("""
 </div>
 """)
 
-# ==================================================================================
-# OPTION 1 : SCRAPER
-# ==================================================================================
+# option 1 : scraper
 if option == "Scraper des données":
     section("Scraper des données",
             "Choisissez le nombre de pages dans la barre latérale, puis la source à scraper.")
@@ -236,9 +204,7 @@ if option == "Scraper des données":
                 st.success(f"Table « {sc.TABLES[source]} » mise à jour : {nouvelles} nouvelle(s) ligne(s), "
                            "les lignes déjà présentes ont été actualisées.")
 
-# ==================================================================================
-# OPTION 2 : DONNÉES BRUTES
-# ==================================================================================
+# option 2 : données brutes
 elif option == "Télécharger les données brutes":
     section("Données brutes, non nettoyées",
             "Collectées sans code avec l'extension Web Scraper, et extraites des bulletins PDF avec pdfplumber.")
@@ -265,22 +231,19 @@ elif option == "Télécharger les données brutes":
             else:
                 fichier = SOURCES[choix]["raw_csv"]
                 df = load_raw_webscraper(fichier)
-                contenu = (RAW_DIR / fichier).read_bytes()  # fichier d'origine, inchangé
+                contenu = (RAW_DIR / fichier).read_bytes()
             section(jeux[choix][0], f"Dimension des données : {df.shape[0]} lignes et {df.shape[1]} colonnes.")
             st.dataframe(df, width="stretch")
             st.download_button("Télécharger en CSV", contenu, fichier, "text/csv",
                                icon=":material/download:", width="stretch")
 
-# ==================================================================================
-# OPTION 3 : DASHBOARD
-# ==================================================================================
+# option 3 : dashboard
 elif option == "Dashboard des données":
     section("Dashboard des données nettoyées")
     with st.container(key="choix_source"):
         source = st.radio("Source", list(NOMS), format_func=NOMS.get, horizontal=True, label_visibility="collapsed")
     df = load_clean(source)
 
-    # ---------------------------------------------------------------- BOOKS
     if source == "books":
         filtre = st.multiselect("Filtrer par catégorie", sorted(df["categorie"].unique()), placeholder="Toutes")
         if filtre:
@@ -299,7 +262,6 @@ elif option == "Dashboard des données":
         afficher(c2, "b4", colonnes_verticales(notes, "note", "prix", "Prix moyen selon la note", "Note (étoiles)",
                                                "Prix moyen (£)", COULEURS[1], ".2f"))
 
-    # ---------------------------------------------------------------- GAARAAS
     elif source == "gaaraas":
         filtre = st.multiselect("Filtrer par marque", sorted(df["marque"].unique()), placeholder="Toutes")
         if filtre:
@@ -326,7 +288,6 @@ elif option == "Dashboard des données":
         fig.update_traces(marker_cornerradius=4, textposition="outside", cliponaxis=False)
         afficher(c2, "g4", fig)
 
-    # ---------------------------------------------------------------- MOTOS
     elif source == "motos":
         filtre = st.multiselect("Filtrer par marque", sorted(df["marque"].unique()), placeholder="Toutes")
         if filtre:
@@ -346,7 +307,6 @@ elif option == "Dashboard des données":
         afficher(c1, "m3", fig)
         afficher(c2, "m4", classement(df["quartier"].value_counts().head(10), "Les 10 quartiers les plus actifs", couleur=COULEURS[1]))
 
-    # ---------------------------------------------------------------- BULLETINS
     else:
         kpis([("Bulletins", df.groupby(["annee", "mois"]).ngroups, "7 en 2020, 4 en 2021"),
               ("Stations", df["station"].nunique(), "au Sénégal"),
@@ -356,7 +316,6 @@ elif option == "Dashboard des données":
                f"{df.loc[df['tmin_minmin'].idxmin(), 'station']}, {df.loc[df['tmin_minmin'].idxmin(), 'mois']} {df.loc[df['tmin_minmin'].idxmin(), 'annee']}")])
         stations = st.multiselect("Comparer des stations (4 au maximum)", sorted(df["station"].unique()),
                                   default=["Dakar", "Matam", "Saint-Louis", "Ziguinchor"], max_selections=4)
-        # chaque station garde sa couleur quand on en ajoute ou retire une autre
         couleurs = {s: c for s, c in st.session_state.get("couleurs_stations", {}).items() if s in stations}
         for s in stations:
             couleurs.setdefault(s, next(c for c in COULEURS if c not in couleurs.values()))
@@ -396,9 +355,7 @@ elif option == "Dashboard des données":
         st.download_button("Télécharger en CSV", csv_bytes(table), f"{source}_clean.csv", "text/csv",
                            icon=":material/download:", width="stretch")
 
-# ==================================================================================
-# OPTION 4 : FORMULAIRES
-# ==================================================================================
+# option 4 : formulaires
 else:
     section("Donnez votre avis", "Le même questionnaire existe en deux versions. Choisissez celle que vous préférez.")
     for colonne, (cle, nom, texte, url) in zip(st.columns(2), [
