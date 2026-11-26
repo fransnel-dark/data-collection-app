@@ -318,7 +318,8 @@ elif option == "Dashboard des données":
                                   default=["Dakar", "Matam", "Saint-Louis", "Ziguinchor"], max_selections=4)
         couleurs = {s: c for s, c in st.session_state.get("couleurs_stations", {}).items() if s in stations}
         for s in stations:
-            couleurs.setdefault(s, next(c for c in COULEURS if c not in couleurs.values()))
+            if s not in couleurs:
+                couleurs[s] = [c for c in COULEURS if c not in couleurs.values()][0]
         st.session_state["couleurs_stations"] = couleurs
         df = df.sort_values(["annee", "mois_num"])
         df["date"] = pd.to_datetime(dict(year=df["annee"], month=df["mois_num"], day=1))
